@@ -101,6 +101,12 @@ const getDefaultModel = (provider: string) => {
 };
 
 const SUPPORTED_PROVIDERS = new Set(['gemini', 'groq', 'openrouter', 'nvidia']);
+const SUPPORTED_MODELS: Record<string, string[]> = {
+  gemini: ['gemini-2.0-flash', 'gemini-1.5-flash'],
+  groq: ['llama-3.3-70b-versatile', 'llama3-70b-8192'],
+  openrouter: ['google/gemini-2.0-flash-001', 'google/gemma-2-27b-it'],
+  nvidia: ['meta/llama-3.1-405b-instruct'],
+};
 
 // Helper to fetch search results from Tavily
 const performWebSearch = async (query: string): Promise<string> => {
@@ -147,18 +153,30 @@ async function startServer() {
     const { messages, provider, modelId, searchEnabled } = req.body;
     
     try {
-      if (!SUPPORTED_PROVIDERS.has(provider)) {
+      const normalizedProvider = typeof provider === 'string' ? provider.trim().toLowerCase() : '';
+      if (!SUPPORTED_PROVIDERS.has(normalizedProvider)) {
         return res.status(400).json({
           success: false,
-          error: `Unsupported or unconfigured provider: ${provider}`,
-          provider
+          error: `Unsupported or unconfigured provider: ${provider || 'undefined'}`,
+          provider: normalizedProvider || provider
         });
       }
 
-      const keyPresent = hasProviderKey(provider);
-      const resolvedModel = modelId || getDefaultModel(provider);
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid request: messages must be a non-empty array',
+          provider: normalizedProvider
+        });
+      }
 
-      console.log(`[chat] provider=${provider} model=${resolvedModel} search=${Boolean(searchEnabled)}`);
+      const keyPresent = hasProviderKey(normalizedProvider);
+      const requestedModel = typeof modelId === 'string' ? modelId.trim() : '';
+      const allowedModels = SUPPORTED_MODELS[normalizedProvider] || [];
+      const defaultModel = getDefaultModel(normalizedProvider);
+      const resolvedModel = allowedModels.includes(requestedModel) ? requestedModel : defaultModel;
+
+      console.log(`[chat] provider=${normalizedProvider} model=${resolvedModel} search=${Boolean(searchEnabled)}`);
       console.log(`[chat] GEMINI key present: ${hasProviderKey('gemini')}`);
       console.log(`[chat] GROQ key present: ${hasProviderKey('groq')}`);
       console.log(`[chat] OPENROUTER key present: ${hasProviderKey('openrouter')}`);
@@ -166,18 +184,18 @@ async function startServer() {
       console.log(`[chat] TAVILY key present: ${Boolean(process.env.TAVILY_API_KEY)}`);
 
       if (!keyPresent) {
-        const missingKeyError = getMissingKeyError(provider);
+        const missingKeyError = getMissingKeyError(normalizedProvider);
         console.error(`[chat] ${missingKeyError}`);
         return res.status(500).json({
           success: false,
           error: missingKeyError,
-          provider
+          provider: normalizedProvider
         });
       }
 
-      const client = getAIClient(provider);
+      const client = getAIClient(normalizedProvider);
       if (!client) {
-        return res.status(400).json({ success: false, error: `Unsupported or unconfigured provider: ${provider}` });
+        return res.status(400).json({ success: false, error: `Unsupported or unconfigured provider: ${normalizedProvider}` });
       }
 
       // 1. Web Search Augmentation if required
@@ -198,7 +216,7 @@ async function startServer() {
 
       let message = "";
 
-      if (provider === 'gemini') {
+      if (normalizedProvider === 'gemini') {
         const geminiClient = client as GoogleGenerativeAI;
         const model = geminiClient.getGenerativeModel({ model: resolvedModel });
         const result = await model.generateContent({
