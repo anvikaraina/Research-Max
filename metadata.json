@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Framr AI",
+  "description": "Production-grade multi-model AI chat system with intelligent routing (Gemini, Groq, NVIDIA NIM, OpenRouter). Built with Supabase and Framer-style UI.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["ai-chat", "multi-model-routing", "auth"]
 }
