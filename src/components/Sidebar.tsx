@@ -74,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-4 flex flex-col gap-2">
         <button 
           onClick={onNewChat}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl bg-white border border-border hover:bg-bg-alt transition-colors font-medium text-sm shadow-sm active:scale-[0.98]"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl bg-white border border-border hover:bg-bg-alt transition-colors font-medium text-sm active:scale-[0.98]"
         >
           <SquarePen className="w-4 h-4" />
           <span>New Chat</span>
@@ -148,7 +148,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 initial={{ opacity: 0, scale: 0.95, y: 8 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 8 }}
-                className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-border shadow-xl rounded-xl overflow-hidden py-1 z-[60]"
+                className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-[#E5E7EB] rounded-xl overflow-hidden py-1 z-[60]"
               >
                 <div className="px-3 py-2 text-[10px] uppercase tracking-widest font-bold text-text-dim border-b border-border mb-1">Account</div>
                 <button className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-bg-alt transition-colors">
@@ -168,7 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Collapse Toggle (Custom UI) */}
       <button 
         onClick={onToggleCollapse}
-        className="absolute top-4 right-4 p-2 bg-white border border-border shadow-sm hover:bg-bg-alt rounded-xl text-text transition-all active:scale-95 z-50"
+        className="absolute top-4 right-4 p-2 bg-white border border-[#D1D5DB] hover:bg-bg-alt rounded-xl text-text transition-all active:scale-95 shadow-md z-[100]"
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
@@ -245,7 +245,7 @@ const ChatNavItem = ({ session, isActive, onSelect, onMenuOpen, isMenuOpen, onRe
             initial={{ opacity: 0, scale: 0.95, y: -5 }} 
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -5 }}
-            className="absolute right-0 top-full mt-1 w-44 bg-white border border-border shadow-xl rounded-xl z-[100] py-1"
+            className="absolute right-0 top-full mt-1 w-44 bg-white border border-[#E5E7EB] rounded-xl z-[100] py-1"
           >
             <button onClick={(e) => { e.stopPropagation(); onPin(); onMenuOpen(null); }} className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-bg-alt transition-colors font-medium">
               <Pin className="w-3.5 h-3.5 text-text-dim" />

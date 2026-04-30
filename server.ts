@@ -81,6 +81,35 @@ const getDefaultModel = (provider: string) => {
   }
 };
 
+// Helper to fetch search results from Tavily
+const performWebSearch = async (query: string): Promise<string> => {
+  if (!process.env.TAVILY_API_KEY) {
+    console.warn("Tavily API key missing, skipping web search.");
+    return "";
+  }
+  
+  try {
+    const response = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: process.env.TAVILY_API_KEY,
+        query: query,
+        search_depth: "basic",
+        max_results: 5
+      })
+    });
+    
+    if (!response.ok) return "";
+    
+    const data: any = await response.json();
+    return data.results.map((r: any) => `Source: ${r.url}\nContent: ${r.content}`).join("\n\n");
+  } catch (error) {
+    console.error("Tavily search failed:", error);
+    return "";
+  }
+};
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -94,7 +123,7 @@ async function startServer() {
 
   // Multi-model routing endpoint
   app.post('/api/chat', chatLimit, async (req: any, res: any) => {
-    const { messages, provider } = req.body;
+    const { messages, provider, modelId, searchEnabled } = req.body;
     
     try {
       const client = getAIClient(provider);
@@ -102,13 +131,29 @@ async function startServer() {
         return res.status(400).json({ success: false, error: `Unsupported or unconfigured provider: ${provider}` });
       }
 
+      // 1. Web Search Augmentation if required
+      let context = "";
+      const lastUserMessage = messages[messages.length - 1]?.content || "";
+      
+      if (searchEnabled) {
+        context = await performWebSearch(lastUserMessage);
+      }
+
+      const enhancedMessages = [...messages];
+      if (context) {
+        enhancedMessages.push({
+          role: "system",
+          content: `Web Search Results:\n${context}\n\nUse this information to answer the user's query if relevant. Cite sources if needed.`
+        });
+      }
+
       let message = "";
 
       if (provider === 'gemini') {
         const geminiClient = client as GoogleGenerativeAI;
-        const model = geminiClient.getGenerativeModel({ model: getDefaultModel(provider) });
+        const model = geminiClient.getGenerativeModel({ model: modelId || 'gemini-1.5-flash' });
         const result = await model.generateContent({
-          contents: messages.map((m: any) => ({
+          contents: enhancedMessages.map((m: any) => ({
             role: m.role === 'user' ? 'user' : 'model',
             parts: [{ text: m.content }]
           }))
@@ -117,8 +162,8 @@ async function startServer() {
       } else {
         const openaiClient = client as OpenAI;
         const response = await openaiClient.chat.completions.create({
-          model: getDefaultModel(provider),
-          messages: messages.map((m: any) => ({
+          model: modelId,
+          messages: enhancedMessages.map((m: any) => ({
             role: m.role,
             content: m.content,
           })),

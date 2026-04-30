@@ -77,12 +77,17 @@ export async function generateTitle(firstMessage: string): Promise<string> {
   }
 }
 
-export async function chatWithAI(messages: ChatMessage[], provider: AIProvider = AIProvider.GEMINI): Promise<string> {
+export async function chatWithAI(
+  messages: ChatMessage[], 
+  provider: AIProvider = AIProvider.GEMINI,
+  modelId?: string,
+  searchEnabled: boolean = false
+): Promise<string> {
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, provider })
+      body: JSON.stringify({ messages, provider, modelId, searchEnabled })
     });
     
     if (!response.ok) {
