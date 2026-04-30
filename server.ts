@@ -95,7 +95,7 @@ const getDefaultModel = (provider: string) => {
     case 'gemini': return 'gemini-2.0-flash';
     case 'groq': return 'llama-3.3-70b-versatile';
     case 'openrouter': return 'google/gemini-2.0-flash-001';
-    case 'nvidia': return 'meta/llama-3.1-405b-instruct';
+    case 'nvidia': return 'openai/gpt-oss-120b';
     default: return '';
   }
 };
@@ -112,7 +112,7 @@ const MODEL_REGISTRY: Record<string, ResolvedModel> = {
 const MODEL_ALIASES: Record<string, string> = {
   'gpt-5-4': 'gpt-5.4',
   'manus-1-6': 'manus-1.6',
-  'meta/llama-3.1-405b-instruct': 'gpt-5.4',
+  'openai/gpt-oss-120b': 'gpt-5.4',
   'llama3-70b-8192': 'manus-1.6',
   'google/gemma-2-27b-it': 'gemini-3-pro',
 };
