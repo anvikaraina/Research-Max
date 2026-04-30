@@ -101,13 +101,35 @@ const getDefaultModel = (provider: string) => {
 };
 
 const SUPPORTED_PROVIDERS = new Set(['gemini', 'groq', 'openrouter', 'nvidia']);
-const SUPPORTED_MODELS: Record<string, string[]> = {
-  gemini: ['gemini-2.0-flash', 'gemini-1.5-flash'],
-  groq: ['llama-3.3-70b-versatile', 'llama3-70b-8192'],
-  openrouter: ['google/gemini-2.0-flash-001', 'google/gemma-2-27b-it'],
-  nvidia: ['meta/llama-3.1-405b-instruct'],
+type ProviderName = 'gemini' | 'groq' | 'openrouter' | 'nvidia';
+type ResolvedModel = { provider: ProviderName; model: string; uiModel: string };
+
+const MODEL_REGISTRY: Record<string, ResolvedModel> = {
+  'gpt-5.4': { provider: 'nvidia', model: 'gpt-oss-120b', uiModel: 'gpt-5.4' },
+  'manus-1.6': { provider: 'groq', model: 'llama-70b', uiModel: 'manus-1.6' },
+  'gemini-3-pro': { provider: 'openrouter', model: 'gemma-27b', uiModel: 'gemini-3-pro' },
+};
+const MODEL_ALIASES: Record<string, string> = {
+  'gpt-5-4': 'gpt-5.4',
+  'manus-1-6': 'manus-1.6',
+  'meta/llama-3.1-405b-instruct': 'gpt-5.4',
+  'llama3-70b-8192': 'manus-1.6',
+  'google/gemma-2-27b-it': 'gemini-3-pro',
 };
 const ACTIVE_AI_PROVIDER = process.env.ACTIVE_AI_PROVIDER?.trim().toLowerCase();
+
+const resolveUiModel = (modelId: unknown): ResolvedModel => {
+  const normalized = typeof modelId === 'string' ? modelId.trim().toLowerCase() : '';
+  const canonicalName = MODEL_REGISTRY[normalized]
+    ? normalized
+    : MODEL_ALIASES[normalized];
+
+  if (!canonicalName || !MODEL_REGISTRY[canonicalName]) {
+    throw new Error(`Unknown model '${modelId}'. Expected one of: ${Object.keys(MODEL_REGISTRY).join(', ')}`);
+  }
+
+  return MODEL_REGISTRY[canonicalName];
+};
 
 const logMissingEnv = (key: string) => {
   console.error(`Missing ENV: ${key}`);
@@ -158,7 +180,8 @@ async function startServer() {
   app.post('/api/chat', chatLimit, async (req: any, res: any) => {
     const { messages, provider, modelId, searchEnabled } = req.body;
     const normalizedProvider = typeof provider === 'string' ? provider.trim().toLowerCase() : '';
-    const requestedProvider = ACTIVE_AI_PROVIDER || normalizedProvider;
+      const resolvedModel = resolveUiModel(modelId);
+      const requestedProvider = (ACTIVE_AI_PROVIDER || resolvedModel.provider) as ProviderName;
     
     try {
       if (!SUPPORTED_PROVIDERS.has(requestedProvider)) {
@@ -178,13 +201,10 @@ async function startServer() {
       }
 
       const keyPresent = hasProviderKey(requestedProvider);
-      const requestedModel = typeof modelId === 'string' ? modelId.trim() : '';
-      const allowedModels = SUPPORTED_MODELS[requestedProvider] || [];
-      const defaultModel = getDefaultModel(requestedProvider);
-      const resolvedModel = allowedModels.includes(requestedModel) ? requestedModel : defaultModel;
 
       console.log(`[chat] AI Provider: ${requestedProvider}`);
-      console.log(`[chat] Model: ${resolvedModel}`);
+      console.log(`[chat] UI Model: ${resolvedModel.uiModel}`);
+      console.log(`[chat] Model: ${resolvedModel.model}`);
       console.log(`[chat] API Key Present: ${keyPresent}`);
       console.log(`[chat] GEMINI key present: ${hasProviderKey('gemini')}`);
       console.log(`[chat] GROQ key present: ${hasProviderKey('groq')}`);
@@ -230,7 +250,7 @@ async function startServer() {
 
       if (requestedProvider === 'gemini') {
         const geminiClient = client as GoogleGenerativeAI;
-        const model = geminiClient.getGenerativeModel({ model: resolvedModel });
+        const model = geminiClient.getGenerativeModel({ model: resolvedModel.model || getDefaultModel(requestedProvider) });
         const result = await model.generateContent({
           contents: enhancedMessages.map((m: any) => ({
             role: m.role === 'user' ? 'user' : 'model',
@@ -241,7 +261,7 @@ async function startServer() {
       } else {
         const openaiClient = client as OpenAI;
         const response = await openaiClient.chat.completions.create({
-          model: resolvedModel,
+          model: resolvedModel.model || getDefaultModel(requestedProvider),
           messages: enhancedMessages.map((m: any) => ({
             role: m.role,
             content: m.content,
