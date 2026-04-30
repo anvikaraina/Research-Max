@@ -107,10 +107,16 @@ const SUPPORTED_MODELS: Record<string, string[]> = {
   openrouter: ['google/gemini-2.0-flash-001', 'google/gemma-2-27b-it'],
   nvidia: ['meta/llama-3.1-405b-instruct'],
 };
+const ACTIVE_AI_PROVIDER = process.env.ACTIVE_AI_PROVIDER?.trim().toLowerCase();
+
+const logMissingEnv = (key: string) => {
+  console.error(`Missing ENV: ${key}`);
+};
 
 // Helper to fetch search results from Tavily
 const performWebSearch = async (query: string): Promise<string> => {
   if (!process.env.TAVILY_API_KEY) {
+    logMissingEnv('TAVILY_API_KEY');
     console.warn("Tavily API key missing, skipping web search.");
     return "";
   }
@@ -139,7 +145,7 @@ const performWebSearch = async (query: string): Promise<string> => {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 
@@ -151,14 +157,15 @@ async function startServer() {
   // Multi-model routing endpoint
   app.post('/api/chat', chatLimit, async (req: any, res: any) => {
     const { messages, provider, modelId, searchEnabled } = req.body;
+    const normalizedProvider = typeof provider === 'string' ? provider.trim().toLowerCase() : '';
+    const requestedProvider = ACTIVE_AI_PROVIDER || normalizedProvider;
     
     try {
-      const normalizedProvider = typeof provider === 'string' ? provider.trim().toLowerCase() : '';
-      if (!SUPPORTED_PROVIDERS.has(normalizedProvider)) {
+      if (!SUPPORTED_PROVIDERS.has(requestedProvider)) {
         return res.status(400).json({
           success: false,
           error: `Unsupported or unconfigured provider: ${provider || 'undefined'}`,
-          provider: normalizedProvider || provider
+          provider: requestedProvider || provider
         });
       }
 
@@ -166,17 +173,19 @@ async function startServer() {
         return res.status(400).json({
           success: false,
           error: 'Invalid request: messages must be a non-empty array',
-          provider: normalizedProvider
+          provider: requestedProvider
         });
       }
 
-      const keyPresent = hasProviderKey(normalizedProvider);
+      const keyPresent = hasProviderKey(requestedProvider);
       const requestedModel = typeof modelId === 'string' ? modelId.trim() : '';
-      const allowedModels = SUPPORTED_MODELS[normalizedProvider] || [];
-      const defaultModel = getDefaultModel(normalizedProvider);
+      const allowedModels = SUPPORTED_MODELS[requestedProvider] || [];
+      const defaultModel = getDefaultModel(requestedProvider);
       const resolvedModel = allowedModels.includes(requestedModel) ? requestedModel : defaultModel;
 
-      console.log(`[chat] provider=${normalizedProvider} model=${resolvedModel} search=${Boolean(searchEnabled)}`);
+      console.log(`[chat] AI Provider: ${requestedProvider}`);
+      console.log(`[chat] Model: ${resolvedModel}`);
+      console.log(`[chat] API Key Present: ${keyPresent}`);
       console.log(`[chat] GEMINI key present: ${hasProviderKey('gemini')}`);
       console.log(`[chat] GROQ key present: ${hasProviderKey('groq')}`);
       console.log(`[chat] OPENROUTER key present: ${hasProviderKey('openrouter')}`);
@@ -184,18 +193,21 @@ async function startServer() {
       console.log(`[chat] TAVILY key present: ${Boolean(process.env.TAVILY_API_KEY)}`);
 
       if (!keyPresent) {
-        const missingKeyError = getMissingKeyError(normalizedProvider);
-        console.error(`[chat] ${missingKeyError}`);
+        const missingKeyError = getMissingKeyError(requestedProvider);
+        const missingKeyName = missingKeyError.replace('Missing ', '').replace(' in environment variables', '');
+        logMissingEnv(missingKeyName);
         return res.status(500).json({
           success: false,
-          error: missingKeyError,
-          provider: normalizedProvider
+          error: 'AI provider configuration failed',
+          missing_env_check: true,
+          provider: requestedProvider,
+          detail: missingKeyError
         });
       }
 
-      const client = getAIClient(normalizedProvider);
+      const client = getAIClient(requestedProvider);
       if (!client) {
-        return res.status(400).json({ success: false, error: `Unsupported or unconfigured provider: ${normalizedProvider}` });
+        return res.status(400).json({ success: false, error: `Unsupported or unconfigured provider: ${requestedProvider}` });
       }
 
       // 1. Web Search Augmentation if required
@@ -216,7 +228,7 @@ async function startServer() {
 
       let message = "";
 
-      if (normalizedProvider === 'gemini') {
+      if (requestedProvider === 'gemini') {
         const geminiClient = client as GoogleGenerativeAI;
         const model = geminiClient.getGenerativeModel({ model: resolvedModel });
         const result = await model.generateContent({
@@ -240,7 +252,7 @@ async function startServer() {
 
       res.json({ success: true, message });
     } catch (error: any) {
-      console.error(`[chat] Provider request failed for ${provider}:`, error);
+      console.error(`[chat] Provider request failed for ${requestedProvider}:`, error);
 
       const status = error?.status || error?.statusCode || 500;
       const isRateLimit = status === 429;
@@ -250,8 +262,10 @@ async function startServer() {
 
       res.status(status).json({
         success: false,
-        error: errorMessage,
-        provider
+        error: 'AI provider configuration failed',
+        missing_env_check: false,
+        provider: requestedProvider,
+        detail: errorMessage
       });
     }
   });
