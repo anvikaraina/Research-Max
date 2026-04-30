@@ -16,7 +16,7 @@ export const MODELS: ModelConfig[] = [
     provider: AIProvider.NVIDIA,
     description: 'High performance compute by NVIDIA',
     icon: 'openai',
-    modelName: 'meta/llama-3.1-405b-instruct'
+    modelName: 'openai/gpt-oss-120b'
   },
   {
     id: 'manus-1-6',

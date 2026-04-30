@@ -81,27 +81,34 @@ export async function chatWithAI(
   messages: ChatMessage[], 
   provider: AIProvider = AIProvider.GEMINI,
   modelId?: string,
-  searchEnabled: boolean = false
+  searchEnabled: boolean = false,
+  providerKeys?: { groq?: string; openrouter?: string; nvidia?: string }
 ): Promise<string> {
+  const endpoint = '/api/chat';
   try {
-    const response = await fetch('/api/chat', {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, provider, modelId, searchEnabled })
+      body: JSON.stringify({ messages, provider, modelId, searchEnabled, providerKeys })
     });
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      if (response.status === 429) {
-        throw new Error(`${provider.toUpperCase()} is currently experiencing high demand. Please try again in a moment.`);
-      }
-      throw new Error(errorData.error || 'Failed to fetch from AI provider');
+      const baseMessage = errorData.error || errorData.detail || 'Failed to fetch from AI provider';
+      const message = response.status === 429
+        ? `${provider.toUpperCase()} is currently experiencing high demand. Please try again in a moment.`
+        : baseMessage;
+      const enriched = new Error(`AI request failed: ${message}`);
+      (enriched as any).context = { endpoint, provider, modelId };
+      (enriched as any).status = response.status;
+      (enriched as any).payload = errorData;
+      throw enriched;
     }
     
     const data = await response.json();
     return data.message;
   } catch (error: any) {
-    console.error('Chat Error:', error);
+    console.error('Chat Error:', error, error?.context ? { context: error.context } : '');
     throw error;
   }
 }
