@@ -25,6 +25,37 @@ const chatLimit = rateLimit({
   legacyHeaders: false,
 });
 
+// Helper to check if a provider key exists without exposing secret values
+const hasProviderKey = (provider: string): boolean => {
+  switch (provider) {
+    case 'gemini':
+      return Boolean(process.env.GEMINI_API_KEY);
+    case 'groq':
+      return Boolean(process.env.GROQ_API_KEY);
+    case 'openrouter':
+      return Boolean(process.env.OPENROUTER_API_KEY);
+    case 'nvidia':
+      return Boolean(process.env.NVIDIA_NIM_API_KEY);
+    default:
+      return false;
+  }
+};
+
+const getMissingKeyError = (provider: string): string => {
+  switch (provider) {
+    case 'gemini':
+      return 'Missing GEMINI_API_KEY in environment variables';
+    case 'groq':
+      return 'Missing GROQ_API_KEY in environment variables';
+    case 'openrouter':
+      return 'Missing OPENROUTER_API_KEY in environment variables';
+    case 'nvidia':
+      return 'Missing NVIDIA_NIM_API_KEY in environment variables';
+    default:
+      return `Unsupported provider: ${provider}`;
+  }
+};
+
 // Helper to get specialized clients
 const getAIClient = (provider: string) => {
   if (process.env.NODE_ENV === "production") {
@@ -33,24 +64,15 @@ const getAIClient = (provider: string) => {
 
   switch (provider) {
     case 'gemini':
-      if (!process.env.GEMINI_API_KEY) {
-        console.error("Missing GEMINI_API_KEY in environment variables");
-      }
-      return new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+      return new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
     case 'groq':
-      if (!process.env.GROQ_API_KEY) {
-        console.error("Missing GROQ_API_KEY in environment variables");
-      }
       return new OpenAI({
-        apiKey: process.env.GROQ_API_KEY,
+        apiKey: process.env.GROQ_API_KEY as string,
         baseURL: 'https://api.groq.com/openai/v1',
       });
     case 'openrouter':
-      if (!process.env.OPENROUTER_API_KEY) {
-        console.error("Missing OPENROUTER_API_KEY in environment variables");
-      }
       return new OpenAI({
-        apiKey: process.env.OPENROUTER_API_KEY,
+        apiKey: process.env.OPENROUTER_API_KEY as string,
         baseURL: 'https://openrouter.ai/api/v1',
         defaultHeaders: {
           'HTTP-Referer': 'https://framr-ai.vercel.app',
@@ -58,11 +80,8 @@ const getAIClient = (provider: string) => {
         },
       });
     case 'nvidia':
-      if (!process.env.NVIDIA_NIM_API_KEY) {
-        console.error("Missing NVIDIA_NIM_API_KEY in environment variables");
-      }
       return new OpenAI({
-        apiKey: process.env.NVIDIA_NIM_API_KEY,
+        apiKey: process.env.NVIDIA_NIM_API_KEY as string,
         baseURL: 'https://integrate.api.nvidia.com/v1',
       });
     default:
@@ -80,6 +99,8 @@ const getDefaultModel = (provider: string) => {
     default: return '';
   }
 };
+
+const SUPPORTED_PROVIDERS = new Set(['gemini', 'groq', 'openrouter', 'nvidia']);
 
 // Helper to fetch search results from Tavily
 const performWebSearch = async (query: string): Promise<string> => {
@@ -126,6 +147,34 @@ async function startServer() {
     const { messages, provider, modelId, searchEnabled } = req.body;
     
     try {
+      if (!SUPPORTED_PROVIDERS.has(provider)) {
+        return res.status(400).json({
+          success: false,
+          error: `Unsupported or unconfigured provider: ${provider}`,
+          provider
+        });
+      }
+
+      const keyPresent = hasProviderKey(provider);
+      const resolvedModel = modelId || getDefaultModel(provider);
+
+      console.log(`[chat] provider=${provider} model=${resolvedModel} search=${Boolean(searchEnabled)}`);
+      console.log(`[chat] GEMINI key present: ${hasProviderKey('gemini')}`);
+      console.log(`[chat] GROQ key present: ${hasProviderKey('groq')}`);
+      console.log(`[chat] OPENROUTER key present: ${hasProviderKey('openrouter')}`);
+      console.log(`[chat] NVIDIA key present: ${hasProviderKey('nvidia')}`);
+      console.log(`[chat] TAVILY key present: ${Boolean(process.env.TAVILY_API_KEY)}`);
+
+      if (!keyPresent) {
+        const missingKeyError = getMissingKeyError(provider);
+        console.error(`[chat] ${missingKeyError}`);
+        return res.status(500).json({
+          success: false,
+          error: missingKeyError,
+          provider
+        });
+      }
+
       const client = getAIClient(provider);
       if (!client) {
         return res.status(400).json({ success: false, error: `Unsupported or unconfigured provider: ${provider}` });
@@ -151,7 +200,7 @@ async function startServer() {
 
       if (provider === 'gemini') {
         const geminiClient = client as GoogleGenerativeAI;
-        const model = geminiClient.getGenerativeModel({ model: modelId || 'gemini-1.5-flash' });
+        const model = geminiClient.getGenerativeModel({ model: resolvedModel });
         const result = await model.generateContent({
           contents: enhancedMessages.map((m: any) => ({
             role: m.role === 'user' ? 'user' : 'model',
@@ -162,7 +211,7 @@ async function startServer() {
       } else {
         const openaiClient = client as OpenAI;
         const response = await openaiClient.chat.completions.create({
-          model: modelId,
+          model: resolvedModel,
           messages: enhancedMessages.map((m: any) => ({
             role: m.role,
             content: m.content,
@@ -173,19 +222,18 @@ async function startServer() {
 
       res.json({ success: true, message });
     } catch (error: any) {
-      console.error(`Error with ${provider}:`, error);
-      
-      const status = error.status || error.statusCode || 500;
-      let errorMessage = error.message || 'Internal Server Error';
-      
-      if (status === 429) {
-        errorMessage = `${provider.toUpperCase()} is currently experiencing high demand (Rate Limited). Please try again in a moment.`;
-      }
+      console.error(`[chat] Provider request failed for ${provider}:`, error);
 
-      res.status(status).json({ 
+      const status = error?.status || error?.statusCode || 500;
+      const isRateLimit = status === 429;
+      const errorMessage = isRateLimit
+        ? `${provider.toUpperCase()} is currently experiencing high demand (Rate Limited). Please try again in a moment.`
+        : `Provider request failed: ${error?.message || 'Unknown provider error'}`;
+
+      res.status(status).json({
         success: false,
         error: errorMessage,
-        provider: provider
+        provider
       });
     }
   });
