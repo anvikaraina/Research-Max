@@ -4,7 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
-import { routeAIRequest } from './lib/aiRouter';
+import { routeAIRequest } from './lib/ai/router';
+export const runtime = 'nodejs';
 
 dotenv.config();
 

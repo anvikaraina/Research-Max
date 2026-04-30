@@ -260,13 +260,19 @@ export default function App() {
 
     } catch (error: any) {
       console.error('Chat error:', error);
+      console.error('Chat error context:', error?.context || {
+        endpoint: '/api/chat',
+        provider: activeProvider,
+        modelId: activeModel.modelName,
+      });
+      const errorMessage = error?.message || 'Unknown error';
       setSessions(prev => prev.map(s => {
         if (s.id === currentSessionId) {
           return { 
             ...s, 
             messages: [...s.messages, { 
               role: 'assistant', 
-              content: "I encountered an error. Please check your AI provider configuration." 
+              content: `AI request failed: ${errorMessage}` 
             }] 
           };
         }
@@ -521,4 +527,3 @@ export default function App() {
     </div>
   );
 }
-
