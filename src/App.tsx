@@ -84,6 +84,13 @@ const MessageItem = memo(({ message, provider }: { message: ChatMessage, provide
 MessageItem.displayName = 'MessageItem';
 
 export default function App() {
+  const [providerKeys, setProviderKeys] = useState<{ groq: string | null; openrouter: string | null; nvidia: string | null }>(() => {
+    const saved = sessionStorage.getItem('provider_keys');
+    return saved ? JSON.parse(saved) : { groq: null, openrouter: null, nvidia: null };
+  });
+  const [keyModal, setKeyModal] = useState<{ open: boolean; provider: 'groq' | 'openrouter' | 'nvidia' | null; modelName: string; value: string }>({
+    open: false, provider: null, modelName: '', value: ''
+  });
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     const saved = localStorage.getItem('framr_sessions');
     return saved ? JSON.parse(saved) : [];
@@ -98,6 +105,7 @@ export default function App() {
   
   const activeModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const activeProvider = activeModel.provider;
+  const requiredProvider = activeProvider as 'groq' | 'openrouter' | 'nvidia';
 
   const [isSearchEnabled, setIsSearchEnabled] = useState(false);
   const [thinkingIndex, setThinkingIndex] = useState(0);
@@ -125,6 +133,9 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('framr_sessions', JSON.stringify(sessions));
   }, [sessions]);
+  useEffect(() => {
+    sessionStorage.setItem('provider_keys', JSON.stringify(providerKeys));
+  }, [providerKeys]);
 
   useEffect(() => {
     if (isLoading) {
@@ -166,6 +177,10 @@ export default function App() {
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
+    if (!providerKeys[requiredProvider]) {
+      setKeyModal({ open: true, provider: requiredProvider, modelName: activeModel.name, value: '' });
+      return;
+    }
 
     let currentSessionId = activeSessionId;
     let currentSessions = [...sessions];
@@ -202,7 +217,8 @@ export default function App() {
         updatedMessages, 
         activeProvider, 
         activeModel.modelName, 
-        isSearchEnabled
+        isSearchEnabled,
+        { [requiredProvider]: providerKeys[requiredProvider] || undefined }
       );
       
       // Initialize streaming message
@@ -313,6 +329,35 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-bg overflow-hidden text-text selection:bg-black/5 selection:text-black">
+      {keyModal.open && keyModal.provider && (
+        <div className="fixed inset-0 bg-black/40 z-[200] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl border border-border p-5 space-y-3">
+            <h3 className="text-lg font-semibold">Enter {keyModal.provider.charAt(0).toUpperCase() + keyModal.provider.slice(1)} API Key</h3>
+            <p className="text-sm text-text-dim">Required for {keyModal.modelName} before sending AI requests.</p>
+            <input
+              type="password"
+              value={keyModal.value}
+              onChange={(e) => setKeyModal(prev => ({ ...prev, value: e.target.value }))}
+              placeholder={`Paste ${keyModal.provider} key`}
+              className="w-full border border-border rounded-xl px-3 py-2 text-sm"
+            />
+            <div className="flex justify-end gap-2">
+              <button className="px-3 py-2 text-sm rounded-xl border border-border" onClick={() => setKeyModal({ open: false, provider: null, modelName: '', value: '' })}>Cancel</button>
+              <button
+                className="px-3 py-2 text-sm rounded-xl bg-black text-white disabled:opacity-50"
+                disabled={!keyModal.value.trim()}
+                onClick={() => {
+                  if (!keyModal.provider) return;
+                  setProviderKeys(prev => ({ ...prev, [keyModal.provider]: keyModal.value.trim() }));
+                  setKeyModal({ open: false, provider: null, modelName: '', value: '' });
+                }}
+              >
+                Save Key
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <Sidebar 
         sessions={sessions}
         activeSessionId={activeSessionId}

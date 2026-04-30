@@ -48,7 +48,7 @@ export default async function handler(req: Req, res: Res) {
   }
 
   try {
-    const { messages, modelId, searchEnabled } = req.body || {};
+    const { messages, modelId, searchEnabled, providerKeys } = req.body || {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'Invalid request: messages must be a non-empty array' });
@@ -68,7 +68,7 @@ export default async function handler(req: Req, res: Res) {
       });
     }
 
-    const routed = await routeAIRequest(modelId, enhancedMessages);
+    const routed = await routeAIRequest(modelId, enhancedMessages, providerKeys);
     return res.status(200).json({ success: true, message: routed.message, provider: routed.provider, model: routed.model });
   } catch (error: any) {
     console.error('[api/chat] handler failure:', error);

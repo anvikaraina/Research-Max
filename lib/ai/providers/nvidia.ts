@@ -2,18 +2,19 @@ import OpenAI from 'openai';
 
 type ProviderMessages = Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
 
-const requireEnv = (key: string): string => {
-  const value = process.env[key];
+const requireKey = (providedKey: string | undefined, envKey: string): string => {
+  const value = providedKey || process.env[envKey];
   if (!value) {
-    console.error(`Missing ENV: ${key}`);
-    throw new Error(`Missing ENV: ${key}`);
+    const err: any = new Error('MISSING_PROVIDER_KEY');
+    err.provider = 'nvidia';
+    throw err;
   }
   return value;
 };
 
-export async function callNvidia(model: string, messages: ProviderMessages): Promise<string> {
+export async function callNvidia(model: string, messages: ProviderMessages, providerKey?: string): Promise<string> {
   const client = new OpenAI({
-    apiKey: requireEnv('NVIDIA_NIM_API_KEY'),
+    apiKey: requireKey(providerKey, 'NVIDIA_NIM_API_KEY'),
     baseURL: 'https://integrate.api.nvidia.com/v1',
   });
   const response = await client.chat.completions.create({ model, messages });

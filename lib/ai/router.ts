@@ -4,8 +4,9 @@ import { callGroq } from './providers/groq';
 import { callOpenRouter } from './providers/openrouter';
 
 export type ProviderMessages = Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+export type ProviderKeys = { groq?: string; openrouter?: string; nvidia?: string };
 
-export async function routeAIRequest(modelId: unknown, messages: ProviderMessages): Promise<{ provider: string; model: string; message: string }> {
+export async function routeAIRequest(modelId: unknown, messages: ProviderMessages, providerKeys?: ProviderKeys): Promise<{ provider: string; model: string; message: string }> {
   const resolved = resolveModel(modelId);
 
   console.log('[ai.router] Routing request', {
@@ -17,11 +18,11 @@ export async function routeAIRequest(modelId: unknown, messages: ProviderMessage
   try {
     switch (resolved.provider) {
       case 'nvidia':
-        return { provider: resolved.provider, model: resolved.model, message: await callNvidia(resolved.model, messages) };
+        return { provider: resolved.provider, model: resolved.model, message: await callNvidia(resolved.model, messages, providerKeys?.nvidia) };
       case 'groq':
-        return { provider: resolved.provider, model: resolved.model, message: await callGroq(resolved.model, messages) };
+        return { provider: resolved.provider, model: resolved.model, message: await callGroq(resolved.model, messages, providerKeys?.groq) };
       case 'openrouter':
-        return { provider: resolved.provider, model: resolved.model, message: await callOpenRouter(resolved.model, messages) };
+        return { provider: resolved.provider, model: resolved.model, message: await callOpenRouter(resolved.model, messages, providerKeys?.openrouter) };
       default:
         throw new Error(`Unsupported provider: ${resolved.provider}`);
     }

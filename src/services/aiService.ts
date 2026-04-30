@@ -81,14 +81,15 @@ export async function chatWithAI(
   messages: ChatMessage[], 
   provider: AIProvider = AIProvider.GEMINI,
   modelId?: string,
-  searchEnabled: boolean = false
+  searchEnabled: boolean = false,
+  providerKeys?: { groq?: string; openrouter?: string; nvidia?: string }
 ): Promise<string> {
   const endpoint = '/api/chat';
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, provider, modelId, searchEnabled })
+      body: JSON.stringify({ messages, provider, modelId, searchEnabled, providerKeys })
     });
     
     if (!response.ok) {
